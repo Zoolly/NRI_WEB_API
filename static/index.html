@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NRI Проекты</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --panel: #1a1a1a;
+    --panel2: #232323;
+    --border: #333;
+    --yellow: #ffcc00;
+    --yellow-dim: #b39400;
+    --text: #f2f2f2;
+    --muted: #999;
+    --ok: #7ad97a;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    margin: 0; padding: 2rem; background: var(--bg); color: var(--text);
+    background-image: radial-gradient(circle at 85% -10%, rgba(255,204,0,.07), transparent 40%);
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.8rem; }
+  .logo {
+    width: 46px; height: 46px; border-radius: 12px;
+    background: var(--yellow); color: #000; font-weight: 800; font-size: 19px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 24px rgba(255,204,0,.35);
+  }
+  header h1 { font-size: 1.45rem; margin: 0; letter-spacing: .3px; }
+  header h1 b { color: var(--yellow); }
+  header .sub { color: var(--muted); font-size: .85rem; margin-top: .2rem; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem;
+    box-shadow: 0 4px 18px rgba(0,0,0,.35);
+  }
+  .card h2 {
+    font-size: .95rem; margin: 0 0 .9rem; color: var(--yellow);
+    text-transform: uppercase; letter-spacing: .8px;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .card h2::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); }
+
+  input, button, textarea, select {
+    font: inherit; padding: .5rem .7rem; color: var(--text);
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(255,204,0,.15); }
+  input[type=file] { padding: .35rem .5rem; }
+  ::file-selector-button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; margin-right: .6rem; padding: .3rem .6rem; }
+  button {
+    cursor: pointer; background: var(--panel2); font-weight: 600;
+  }
+  button:hover { border-color: var(--yellow); }
+  button.primary {
+    background: var(--yellow); color: #000; border: none; font-weight: 700;
+    box-shadow: 0 2px 10px rgba(255,204,0,.25);
+  }
+  button.primary:hover { box-shadow: 0 2px 16px rgba(255,204,0,.45); }
+  button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+  .row { display: flex; gap: .6rem; align-items: center; margin-bottom: .55rem; flex-wrap: wrap; }
+  .row:last-child { margin-bottom: 0; }
+  .grow { flex: 1; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: .5rem; }
+  .muted { color: var(--muted); font-size: .85rem; }
+  #status, #xlStatus { margin-top: .5rem; font-size: .85rem; }
+  .ok { color: var(--ok); } .err { color: var(--err); }
+  #xlErrors { color: var(--err); font-size: .8rem; margin-top: .3rem; }
+  .erpOpt { display: block; padding: .25rem .4rem; margin: .1rem 0; border-radius: 6px;
+            font-size: .78rem; cursor: pointer; border: 1px solid transparent; }
+  .erpOpt:hover { background: rgba(255,204,0,.07); border-color: var(--border); }
+  .erpOpt input { accent-color: var(--yellow); margin-right: .3rem; vertical-align: middle; }
+
+  table { border-collapse: collapse; width: 100%; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  th, td { border-bottom: 1px solid var(--border); padding: .45rem .6rem; text-align: left; font-size: .8rem; }
+  th { background: #151515; color: var(--yellow); position: sticky; top: 0; z-index: 1; text-transform: uppercase; font-size: .7rem; letter-spacing: .5px; }
+  thead tr:nth-child(2) th { top: 30px; }
+  th select {
+    width: 100%; min-width: 120px; padding: .25rem .4rem;
+    font-size: .72rem; text-transform: none; letter-spacing: 0;
+    color: var(--muted); background: transparent; border: none;
+    border-radius: 6px;
+  }
+  th select:hover { color: var(--text); }
+  th select:focus { color: var(--text); outline: none; }
+  th select option { color: var(--text); background: var(--panel2); }
+  tbody tr:hover { background: rgba(255,204,0,.05); }
+  #tblWrap { max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+  #tblWrap::-webkit-scrollbar { width: 10px; }
+  #tblWrap::-webkit-scrollbar-thumb { background: var(--yellow-dim); border-radius: 5px; }
+  #tblWrap::-webkit-scrollbar-track { background: var(--panel); }
+
+  input[type=checkbox] { accent-color: var(--yellow); width: 15px; height: 15px; padding: 0; }
+  input[type=file]::file-selector-button { cursor: pointer; }
+
+  .badge { display: inline-block; padding: .1rem .5rem; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+  .badge.ok { background: rgba(122,217,122,.12); color: var(--ok); }
+  .badge.err { background: rgba(255,107,107,.12); color: var(--err); }
+  .badge.wait { background: rgba(255,204,0,.1); color: var(--yellow); }
+
+  #xlTbl { margin-top: .6rem; }
+  .fieldLabel { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">NRI</div>
+  <div>
+    <h1>Проекты <b>NRI</b></h1>
+    <div class="sub">поиск · комментарии · документы · пакетная обработка</div>
+  </div>
+</header>
+
+<div class="card">
+  <h2>Поиск проектов</h2>
+  <div class="row">
+    <select id="region"><option value="">— все регионы —</option></select>
+    <select id="subsidiary"><option value="">— все филиалы —</option></select>
+  </div>
+  <div class="row">
+    <select id="searchBy">
+      <option value="all">Все проекты</option>
+      <option value="project_id" selected>По ID проекта</option>
+      <option value="poscode">По ЕРП (номер позиции)</option>
+      <option value="number">По номеру БС</option>
+    </select>
+    <input id="q" placeholder="Строка поиска..." class="grow">
+    <button class="primary" onclick="search(0)">Найти</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="card">
+  <h2>Пакетная обработка выбранных проектов</h2>
+  <div class="row">
+    <textarea id="comment" rows="3" class="grow" placeholder="Текст для поля «Дополнительная информация» (пусто — не менять)"></textarea>
+  </div>
+  <div class="row">
+    <select id="docType"><option value="">— тип документа —</option></select>
+    <input type="text" id="docDescr" placeholder="Описание документа" style="width:280px">
+  </div>
+  <div class="row">
+    <input type="file" id="files" multiple>
+    <button class="primary" onclick="runBatch()">Применить к выбранным</button>
+    <span id="selCount" class="muted">выбрано: 0</span>
+  </div>
+  <div class="hint">Тип документа нужен только при прикреплении файлов — список подгружается по первому отмеченному проекту.</div>
+</div>
+
+<div class="card">
+  <h2>Импорт из Excel — проекты + комментарий для каждого</h2>
+  <div class="row">
+    <span class="fieldLabel">Идентификатор:</span>
+    <select id="xlIdMode">
+      <option value="auto">Авто</option>
+      <option value="id">ID проекта</option>
+      <option value="erp">ЕРП (номер позиции)</option>
+    </select>
+    <input type="file" id="xlFile" accept=".xlsx,.xls">
+    <button onclick="parseExcel()">Прочитать файл</button>
+    <button id="applyExcelBtn" class="primary" onclick="applyExcel()" disabled>Применить</button>
+    <span id="xlStatus" class="muted"></span>
+  </div>
+  <div class="row">
+    <span class="fieldLabel">Документы для всех проектов:</span>
+    <select id="xlDocType"><option value="">— тип документа —</option></select>
+    <input type="text" id="xlDocDescr" placeholder="Описание документа" style="width:280px">
+    <input type="file" id="xlFiles" multiple>
+  </div>
+  <div class="row">
+    <span class="fieldLabel">Действие workflow:</span>
+    <select id="xlAction"><option value="">— без действия —</option></select>
+    <button id="applyActionBtn" class="primary" onclick="applyExcelAction()" disabled>Выполнить действие</button>
+  </div>
+  <div class="hint">Для действий с комментарием текст берётся из колонки «Комментарий» файла.</div>
+  <div class="hint">Колонки: «ID» (или «ИД проекта») и «Комментарий». Без заголовков: 1-я колонка = ID, 2-я = комментарий. Комментарий можно оставить пустым — тогда только прикрепятся файлы.</div>
+  <div id="xlErrors"></div>
+  <div id="xlReport" style="margin-top:.5rem"></div>
+  <table id="xlTbl"><thead><tr><th>ID проекта</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th></tr></thead><tbody></tbody></table>
+</div>
+
+<div class="card" id="actionsCard" style="display:none">
+  <h2>Доступные действия — <span id="actProject"></span></h2>
+  <div id="actList" class="muted">Загрузка...</div>
+</div>
+
+<div id="tblWrap">
+  <table id="tbl"><thead></thead><tbody></tbody></table>
+</div>
+<div id="shownCount" class="muted" style="text-align:right;margin:.4rem .2rem 0"></div>
+
+</div>
+
+<script>
+const qs = s => document.querySelector(s);
+const ids = new Set();
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || r.status);
+  return body;
+}
+
+async function search(start = 0) {
+  qs('#status').textContent = 'Поиск...';
+  try {
+    const p = new URLSearchParams({
+      search_by: qs('#searchBy').value,
+      start,
+      limit: 200
+    });
+    if (qs('#q').value.trim()) p.set('query', qs('#q').value.trim());
+    if (qs('#region').value) p.set('region_id', qs('#region').value);
+    if (qs('#subsidiary').value) p.set('subsidiary_id', qs('#subsidiary').value);
+    const data = await api('/api/projects?' + p);
+    render(data.items);
+    qs('#status').textContent = '';
+  } catch (e) { qs('#status').innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+// --- фильтры регион/филиал (как на сайте) ---
+const cleanList = items => (items || []).filter(x =>
+  x.id !== 0 && !String(x.name || '').startsWith('*'));
+
+async function loadRegions() {
+  try {
+    const data = await api('/api/regions');
+    qs('#region').innerHTML = '<option value="">— все регионы —</option>' +
+      cleanList(data.items).map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  } catch (e) {
+    qs('#region').innerHTML = `<option value="">Ошибка: ${e.message}</option>`;
+  }
+}
+
+async function loadSubsidiaries(regionId) {
+  try {
+    const url = regionId ? `/api/subsidiaries?region_id=${regionId}` : '/api/subsidiaries';
+    const data = await api(url);
+    qs('#subsidiary').innerHTML = '<option value="">— все филиалы —</option>' +
+      cleanList(data.items).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  } catch (e) {
+    qs('#subsidiary').innerHTML = `<option value="">Ошибка: ${e.message}</option>`;
+  }
+}
+
+qs('#region').addEventListener('change', () => {
+  loadSubsidiaries(qs('#region').value);
+  qs('#subsidiary').value = '';
+});
+loadRegions();
+loadSubsidiaries();
+
+const COLS = [
+  ['displayNumber', '№ БС'],
+  ['poscode', 'ЕРП'],
+  ['projectName', 'Название'],
+  ['SType', 'Тип'],
+  ['SAgreeStr', 'Стадия'],
+  ['fullAddress', 'Адрес'],
+  ['SDate', 'Дата'],
+  ['id', 'ID'],
+];
+
+let currentItems = [];
+
+function fillColFilter(sel, values, allLabel) {
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${allLabel}</option>` +
+    values.map(v => `<option${v === cur ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+function buildColFilters() {
+  fillColFilter(qs('#fltType'), [...new Set(currentItems.map(i => i.SType).filter(Boolean))].sort(), '— все типы —');
+  fillColFilter(qs('#fltStage'), [...new Set(currentItems.map(i => i.SAgreeStr).filter(Boolean))].sort(), '— все стадии —');
+}
+
+function applyColFilters() {
+  const t = qs('#fltType').value, s = qs('#fltStage').value;
+  const view = currentItems.filter(it => (!t || it.SType === t) && (!s || it.SAgreeStr === s));
+  qs('#tbl tbody').innerHTML = view.map(it => {
+    const tds = COLS.map(c => `<td>${it[c[0]] ?? ''}</td>`).join('');
+    const cb = `<input type="checkbox" data-id="${it.id}" onchange="toggle(this)">`;
+    return `<tr><td>${cb}</td>${tds}</tr>`;
+  }).join('');
+  qs('#shownCount').textContent =
+    currentItems.length ? `показано: ${view.length} из ${currentItems.length}` : '';
+}
+
+// делегирование: селекты в шапке пересоздаются при каждом поиске
+qs('#tbl').addEventListener('change', e => {
+  if (e.target.id === 'fltType' || e.target.id === 'fltStage') applyColFilters();
+});
+
+// клик по строке проекта -> панель «Доступные действия»
+qs('#tbl tbody').addEventListener('click', e => {
+  if (e.target.type === 'checkbox') return;
+  const tr = e.target.closest('tr');
+  if (!tr || !tr.querySelector('input[type=checkbox]')) return;
+  const pid = +tr.querySelector('input[type=checkbox]').dataset.id;
+  const proj = currentItems.find(p => p.id === pid);
+  if (!proj) return;
+  showActions(proj);
+});
+
+async function showActions(proj) {
+  qs('#actionsCard').style.display = '';
+  qs('#actProject').textContent =
+    `${proj.displayNumber} — ${proj.projectName} (id ${proj.id})`;
+  if (!proj.wfProcessid) {
+    qs('#actList').innerHTML =
+      '<span class="muted">У проекта нет запущенного процесса согласования — действия недоступны</span>';
+    return;
+  }
+  qs('#actList').textContent = 'Загрузка...';
+  try {
+    const data = await api(`/api/projects/${proj.id}/actions?process_id=${proj.wfProcessid}`);
+    const items = (data.items || []).filter(a => a.isAllowed);
+    if (!items.length) {
+      qs('#actList').innerHTML = '<span class="muted">Нет доступных действий</span>';
+      return;
+    }
+    qs('#actList').innerHTML =
+      '<table><thead><tr><th>Наименование</th><th style="width:90px">Запуск</th><th style="width:60px">Итог</th></tr></thead><tbody>' +
+      items.map((a, i) => {
+        const msgs = (a.messages || []).map(m => m.message).join('<br>');
+        return `<tr><td>${a.name}${msgs ? `<div class="muted" style="font-size:.72rem">${msgs}</div>` : ''}</td>` +
+          `<td><button class="primary" style="font-size:.72rem;padding:.25rem .6rem" onclick="runAction(${i})" id="actBtn${i}">Выполнить</button></td>` +
+          `<td id="actRes${i}"></td></tr>`;
+      }).join('') + '</tbody></table>';
+    qs('#actList')._items = items;
+    qs('#actList')._proj = proj;
+  } catch (e) {
+    qs('#actList').innerHTML = `<span class="err">${e.message}</span>`;
+  }
+}
+
+async function runAction(i) {
+  const list = qs('#actList');
+  const a = list._items[i];
+  const proj = list._proj;
+  const btn = qs('#actBtn' + i);
+  const res = qs('#actRes' + i);
+  if (!confirm(`Выполнить действие «${a.name}» по проекту ${proj.displayNumber}?`)) return;
+
+  let comment = '';
+  if (/коммент/i.test(a.name)) {
+    comment = prompt('Текст комментария для действия «' + a.name + '»:', '');
+    if (comment === null) return;
+  }
+
+  btn.disabled = true;
+  res.innerHTML = '<span class="badge wait">…</span>';
+  try {
+    await api(`/api/projects/${proj.id}/run-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action_url: a.url, action_id: a.id,
+        process_id: proj.wfProcessid, comment
+      })
+    });
+    res.innerHTML = '<span class="badge ok">✓</span>';
+    btn.textContent = 'Выполнено';
+  } catch (e) {
+    res.innerHTML = `<span class="badge err" title="${e.message}">✗</span>`;
+    alert('Действие не выполнено:\n' + e.message);
+    btn.disabled = false;
+  }
+}
+
+function render(items) {
+  currentItems = items;
+  let row1 = '<th style="width:28px"><input type="checkbox" title="Выбрать все" onchange="selectAll(this)"></th>';
+  let row2 = '<th style="width:28px"></th>';
+  for (const c of COLS) {
+    row1 += `<th>${c[1]}</th>`;
+    if (c[0] === 'SType') {
+      row2 += '<th><select id="fltType"><option value="">— все типы —</option></select></th>';
+    } else if (c[0] === 'SAgreeStr') {
+      row2 += '<th><select id="fltStage"><option value="">— все стадии —</option></select></th>';
+    } else {
+      row2 += '<th></th>';
+    }
+  }
+  qs('#tbl thead').innerHTML = `<tr>${row1}</tr><tr>${row2}</tr>`;
+  buildColFilters();
+  applyColFilters();
+}
+
+function selectAll(master) {
+  document.querySelectorAll('#tbl tbody input[type=checkbox]').forEach(cb => {
+    cb.checked = master.checked;
+    master.checked ? ids.add(+cb.dataset.id) : ids.delete(+cb.dataset.id);
+  });
+  qs('#selCount').textContent = 'выбрано: ' + ids.size;
+  if (ids.size) loadDocTypes([...ids][0], qs('#docType'));
+}
+
+function toggle(el) {
+  el.checked ? ids.add(+el.dataset.id) : ids.delete(+el.dataset.id);
+  qs('#selCount').textContent = 'выбрано: ' + ids.size;
+  if (ids.size) loadDocTypes([...ids][0], qs('#docType'));
+}
+
+async function loadDocTypes(pid, sel) {
+  try {
+    const data = await api(`/api/projects/${pid}/doctypes`);
+    const items = data.items || [];
+    // доступные проекту (selected), иначе все
+    let list = items.filter(d => d.selected);
+    if (!list.length) list = items;
+    // оставляем только «ИД по радио-интервалу», если такой есть
+    const target = list.filter(d =>
+      d.name.toLowerCase().replace(/[\s\-_]/g, '')
+       .includes('идпорадиоинтервалу'));
+    if (target.length) list = target;
+    sel.innerHTML = '<option value="">— тип документа —</option>' +
+      list.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    if (target.length === 1) sel.selectedIndex = 1;
+  } catch (e) {
+    sel.innerHTML = `<option value="">Ошибка загрузки типов: ${e.message}</option>`;
+  }
+}
+
+async function runBatch() {
+  if (!ids.size) return alert('Выберите хотя бы один проект (галочки в таблице)');
+  const comment = qs('#comment').value;
+  const docType = qs('#docType').value;
+  const files = qs('#files').files;
+  if (!comment.trim() && !files.length) return alert('Укажите комментарий или выберите файлы');
+  if (files.length && !docType) return alert('Выберите тип документа для прикрепления файлов');
+
+  const fd = new FormData();
+  fd.append('project_ids', JSON.stringify([...ids]));
+  if (comment.trim()) fd.append('comment', comment);
+  if (docType) {
+    fd.append('doc_type_id', docType);
+    fd.append('description', qs('#docDescr').value);
+  }
+  for (const f of files) fd.append('files', f);
+
+  qs('#status').textContent = `Обработка ${ids.size} проектов...`;
+  try {
+    const res = await api('/api/batch', { method: 'POST', body: fd });
+    const entries = Object.entries(res.results);
+    const okCnt = entries.filter(([, v]) => !v.error).length;
+    const errCnt = entries.length - okCnt;
+    qs('#status').innerHTML =
+      `<span class="${errCnt ? 'err' : 'ok'}">Готово: успешно ${okCnt}, ошибок ${errCnt}</span>` +
+      (errCnt ? '<br>' + entries.filter(([, v]) => v.error)
+        .map(([pid, v]) => `Проект ${pid}: <span class="err">${v.error}</span>`).join('<br>') : '');
+  } catch (e) { qs('#status').innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+let excelItems = [];
+let excelIdMode = 'id';
+
+async function parseExcel() {
+  const f = qs('#xlFile').files[0];
+  if (!f) return alert('Выберите Excel-файл');
+  qs('#xlStatus').textContent = 'Чтение...';
+  qs('#xlErrors').textContent = '';
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('id_mode', qs('#xlIdMode').value);
+    const res = await api('/api/excel/parse', { method: 'POST', body: fd });
+    excelItems = res.items;
+    excelIdMode = res.id_mode || 'id';
+    const identTitle = excelIdMode === 'erp' ? 'ЕРП' : 'ID проекта';
+    const autoNote = qs('#xlIdMode').value === 'auto' && (res.notes || []).length
+      ? ` (${res.notes.join('; ')})` : '';
+    qs('#xlTbl thead').innerHTML =
+      `<tr><th>${identTitle}</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th><th>Ошибка</th></tr>`;
+    qs('#xlTbl tbody').innerHTML = excelItems.map((it, i) =>
+      `<tr><td>${it.erp ?? it.id}</td><td>${it.comment || '<i class="muted">(пусто)</i>'}</td><td id="xlPr${i}" class="muted">${it.erp !== undefined ? '<span class="badge wait">поиск…</span>' : '—'}</td><td id="xlSt${i}" class="muted">—</td><td id="xlErr${i}" class="err" style="font-size:.75rem"></td></tr>`).join('');
+    qs('#xlStatus').textContent = `прочитано: ${res.total} (лист «${res.sheet}»), режим: ${identTitle}${autoNote}`;
+    qs('#xlErrors').textContent = (res.errors || []).join('; ');
+    qs('#applyExcelBtn').disabled = !excelItems.length;
+    qs('#applyActionBtn').disabled = !excelItems.length;
+    // сопоставление идентификаторов с проектами + действия по первому проекту
+    if (excelItems.length) {
+      (async () => {
+        try {
+          const it = excelItems[0];
+          const proj = it.erp !== undefined ? await resolveErp(it.erp) : await fetchProject(it.id);
+          loadDocTypes(proj.id, qs('#xlDocType'));
+          loadActions(proj, qs('#xlAction'));
+        } catch (e) { /* подгрузится при выборе проекта в поиске */ }
+      })();
+    }
+    if (excelIdMode === 'erp') resolveAllErp();
+  } catch (e) {
+    qs('#xlStatus').textContent = '';
+    qs('#xlErrors').textContent = e.message;
+  }
+}
+
+// ЕРП -> кандидаты проектов (точное совпадение номера позиции)
+async function findErpCandidates(erp) {
+  const data = await api(`/api/projects?search_by=poscode&query=${encodeURIComponent(erp)}&limit=50`);
+  return (data.items || []).filter(it => String(it.poscode) === String(erp));
+}
+
+// ЕРП -> ровно один проект (для служебных нужд)
+async function resolveErp(erp) {
+  const exact = await findErpCandidates(erp);
+  if (!exact.length) throw new Error(`Проект с ЕРП ${erp} не найден`);
+  if (exact.length > 1) throw new Error(`ЕРП ${erp} неоднозначен (${exact.length} проектов)`);
+  return exact[0];
+}
+
+// данные проекта по ID (для wfProcessid и отображения)
+async function fetchProject(pid) {
+  const data = await api(`/api/projects?search_by=project_id&query=${pid}&limit=5`);
+  const it = (data.items || []).find(p => p.id === +pid);
+  if (!it) throw new Error(`Проект ${pid} не найден`);
+  return it;
+}
+
+// список доступных действий проекта -> селект
+async function loadActions(proj, sel) {
+  try {
+    const data = await api(`/api/projects/${proj.id}/actions?process_id=${proj.wfProcessid}`);
+    const items = (data.items || []).filter(a => a.isAllowed);
+    sel._items = items;
+    sel.innerHTML = '<option value="">— без действия —</option>' +
+      items.map((a, i) => `<option value="${i}">${a.name}</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = `<option value="">Ошибка загрузки действий: ${e.message}</option>`;
+  }
+}
+
+// Сопоставление всех ЕРП из файла: 0/1 проект — автоматически,
+// несколько — список с переключателями для выбора вручную
+async function resolveAllErp() {
+  for (let i = 0; i < excelItems.length; i++) {
+    const it = excelItems[i];
+    const prCell = qs('#xlPr' + i);
+    try {
+      const exact = await findErpCandidates(it.erp);
+      if (!exact.length) {
+        prCell.innerHTML = '—';
+        qs('#xlErr' + i).textContent = 'проект не найден';
+      } else if (exact.length === 1) {
+        it._proj = exact[0];
+        prCell.textContent = `${exact[0].displayNumber} (id ${exact[0].id})`;
+      } else {
+        it._cands = exact;
+        prCell.innerHTML = '<div class="muted" style="margin-bottom:.2rem">несколько проектов — выберите:</div>' +
+          exact.map((p, k) =>
+            `<label class="erpOpt"><input type="radio" name="erp${i}" value="${k}" onchange="erpPick(${i}, ${k})"> ` +
+            `<b>${p.displayNumber}</b> — ${p.SType}, ${p.SAgreeStr}, ${p.fullAddress ?? ''} (id ${p.id})</label>`).join('');
+      }
+    } catch (e) {
+      prCell.innerHTML = `<span class="err" title="${e.message}">ошибка поиска</span>`;
+      qs('#xlErr' + i).textContent = e.message;
+    }
+  }
+}
+
+function erpPick(i, k) {
+  excelItems[i]._proj = excelItems[i]._cands[k];
+}
+
+// отдельный прогон: только действие workflow для всех проектов списка
+async function applyExcelAction() {
+  if (!excelItems.length) return;
+  const actSel = qs('#xlAction');
+  const action = actSel.value !== '' ? actSel._items[+actSel.value] : null;
+  if (!action) return alert('Выберите действие workflow');
+  const unresolved = excelItems.filter(it => it.erp !== undefined && !it._proj);
+  if (unresolved.length) return alert(`Не выбран проект для ${unresolved.length} строк(и) `
+    + `(не найден или несколько совпадений — отметьте проект в списке)`);
+  if (!confirm(`Выполнить действие «${action.name}» для ${excelItems.length} проектов?`)) return;
+
+  qs('#applyActionBtn').disabled = true;
+  let ok = 0, fail = 0;
+  for (let i = 0; i < excelItems.length; i++) {
+    const it = excelItems[i];
+    const stCell = qs('#xlSt' + i);
+    const errCell = qs('#xlErr' + i);
+    stCell.innerHTML = '<span class="badge wait">…</span>';
+    try {
+      if (!it._proj) it._proj = await fetchProject(it.id);
+      await api(`/api/projects/${it._proj.id}/run-action`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action_url: action.url, action_id: action.id,
+          process_id: it._proj.wfProcessid,
+          comment: /коммент/i.test(action.name) ? it.comment : ''
+        })
+      });
+      stCell.innerHTML = '<span class="badge ok">✓</span>'; ok++;
+    } catch (e) {
+      stCell.innerHTML = '<span class="badge err">✗</span>';
+      errCell.textContent = e.message;
+      fail++;
+    }
+  }
+  qs('#xlStatus').innerHTML =
+    `Действие «${action.name}»: <span class="${fail ? 'err' : 'ok'}">успешно ${ok}, ошибок ${fail}</span>`;
+  qs('#xlReport').innerHTML = fail
+    ? `<span class="err">Ошибки — в столбце «Ошибка» таблицы</span>` : '';
+  qs('#applyActionBtn').disabled = false;
+}
+
+async function applyExcel() {
+  if (!excelItems.length) return;
+  const files = qs('#xlFiles').files;
+  const docType = qs('#xlDocType').value;
+  const docDescr = qs('#xlDocDescr').value;
+  const actSel = qs('#xlAction');
+  const action = null; // действие выполняется отдельной кнопкой
+  const unresolved = excelItems.filter(it => it.erp !== undefined && !it._proj);
+  if (unresolved.length) return alert(`Не выбран проект для ${unresolved.length} строк(и) `
+    + `(не найден или несколько совпадений — отметьте проект в списке)`);
+  const withComment = excelItems.some(it => it.comment.trim());
+  if (!withComment && !files.length) return alert('В файле нет комментариев и не выбраны документы');
+  if (files.length && !docType) return alert('Выберите тип документа для прикрепления файлов');
+  if (!confirm(`Применить к ${excelItems.length} проектам?\n`
+      + (withComment ? `Комментарии: да\n` : '') + (files.length ? `Файлов: ${files.length}\n` : '')
+      + 'Действие: отдельной кнопкой')) return;
+
+  qs('#applyExcelBtn').disabled = true;
+  let ok = 0, fail = 0;
+  for (let i = 0; i < excelItems.length; i++) {
+    const it = excelItems[i];
+    const stCell = qs('#xlSt' + i);
+    const errCell = qs('#xlErr' + i);
+    stCell.innerHTML = '<span class="badge wait">…</span>';
+    const rowErrors = [];
+    try {
+      // проект (для id-режима подгружаем данные, для ЕРП уже выбран)
+      if (!it._proj) it._proj = await fetchProject(it.id);
+      const pid = it._proj.id;
+      const steps = [];
+      if (it.comment.trim()) {
+        steps.push(api(`/api/projects/${pid}/comment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: it.comment })
+        }));
+      }
+      for (const f of files) {
+        const fd = new FormData();
+        fd.append('file', f);
+        fd.append('doc_type_id', docType);
+        fd.append('description', docDescr);
+        steps.push(api(`/api/projects/${pid}/attach`, { method: 'POST', body: fd }));
+      }
+      await Promise.all(steps);
+      stCell.innerHTML = '<span class="badge ok">OK</span>'; ok++;
+    } catch (e) {
+      rowErrors.push(e.message);
+      stCell.innerHTML = '<span class="badge err">✗</span>';
+      errCell.textContent = rowErrors.join('; ');
+      fail++;
+    }
+  }
+  qs('#xlStatus').innerHTML = `<span class="${fail ? 'err' : 'ok'}">Готово: успешно ${ok}, ошибок ${fail}</span>`;
+  qs('#xlReport').innerHTML = fail
+    ? `<span class="err">Ошибок: ${fail} — тексты в столбце «Ошибка» таблицы</span>` : '';
+  qs('#applyExcelBtn').disabled = false;
+}
+
+search(0);
+</script>
+</body>
+</html>
