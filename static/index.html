@@ -31,6 +31,14 @@
     background: var(--yellow); color: #000; font-weight: 800; font-size: 19px;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 0 24px rgba(255,204,0,.35);
+    cursor: pointer; user-select: none;
+    border: 1px solid transparent;
+    transition: background .2s, color .2s, border-color .2s;
+  }
+  .logo.active {
+    background: var(--bg); color: var(--yellow);
+    border-color: var(--yellow);
+    box-shadow: 0 0 24px rgba(255,204,0,.6);
   }
   header h1 { font-size: 1.45rem; margin: 0; letter-spacing: .3px; }
   header h1 b { color: var(--yellow); }
@@ -115,7 +123,7 @@
 <div class="wrap">
 
 <header>
-  <div class="logo">NRI</div>
+  <div class="logo" onclick="toggleDelayMode()" title="Задержка между строками">NRI</div>
   <div>
     <h1>Проекты <b>NRI</b></h1>
     <div class="sub">поиск · комментарии · документы · пакетная обработка</div>
@@ -173,6 +181,12 @@
     <select id="xlAction"><option value="">— без действия —</option></select>
     <button id="applyActionBtn" class="primary" onclick="applyExcelAction()" disabled>Выполнить действие</button>
   </div>
+  <div class="row" id="xlDelayRow" style="display:none">
+    timeout внесения:
+    <select id="xlDelayMin"></select> - <select id="xlDelayMax"></select>
+    <span id="xlDelayTimer" class="muted" style="font-size:.9rem"></span>
+  </div>
+  <input type="checkbox" id="xlDelay" style="display:none">
   <div id="xlErrors"></div>
   <div id="xlReport" style="margin-top:.5rem"></div>
   <table id="xlTbl"><thead><tr><th>ID проекта</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th></tr></thead><tbody></tbody></table>
@@ -618,6 +632,46 @@ async function loadActionsUnion(projects, sel) {
   }
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// заполнение селектов мин/макс задержки (1..15 мин)
+(function initDelaySelects() {
+  const opts = sel => Array.from({length: 15}, (_, k) =>
+    `<option value="${k + 1}">${k + 1}</option>`).join('');
+  qs('#xlDelayMin').innerHTML = opts();
+  qs('#xlDelayMax').innerHTML = opts();
+  qs('#xlDelayMin').value = '2';
+  qs('#xlDelayMax').value = '5';
+})();
+
+// активация режима задержки — кликом по логотипу
+function toggleDelayMode() {
+  const cb = qs('#xlDelay');
+  cb.checked = !cb.checked;
+  qs('#xlDelayRow').style.display = cb.checked ? '' : 'none';
+  qs('.logo').classList.toggle('active', cb.checked);
+  if (!cb.checked) qs('#xlDelayTimer').textContent = '';
+}
+
+// пауза между строками (если включена галочка): случайная, в заданных пределах
+async function delayBetweenRows(i) {
+  if (!qs('#xlDelay').checked) return;
+  let lo = parseInt(qs('#xlDelayMin').value, 10) || 1;
+  let hi = parseInt(qs('#xlDelayMax').value, 10) || 15;
+  if (lo > hi) [lo, hi] = [hi, lo];
+  const totalMs = Math.round((lo + Math.random() * (hi - lo)) * 60000);
+  let left = totalMs;
+  const t = qs('#xlDelayTimer');
+  while (left > 0) {
+    const mm = String(Math.floor(left / 60000)).padStart(2, '0');
+    const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, '0');
+    t.textContent = `⏳ пауза до строки ${i + 2}: ${mm}:${ss}`;
+    await sleep(Math.min(1000, left));
+    left -= 1000;
+  }
+  t.textContent = '';
+}
+
 // отдельный прогон: только действие workflow для всех проектов списка
 async function applyExcelAction() {
   if (!excelItems.length) return;
@@ -651,6 +705,7 @@ async function applyExcelAction() {
       errCell.textContent = e.message;
       fail++;
     }
+    if (i < excelItems.length - 1) await delayBetweenRows(i);
   }
   qs('#xlStatus').innerHTML =
     `Действие «${action.name}»: <span class="${fail ? 'err' : 'ok'}">успешно ${ok}, ошибок ${fail}</span>`;
@@ -703,6 +758,7 @@ async function applyExcel() {
       errCell.textContent = e.message;
       fail++;
     }
+    if (i < excelItems.length - 1) await delayBetweenRows(i);
   }
   qs('#xlStatus').innerHTML = `<span class="${fail ? 'err' : 'ok'}">Готово: успешно ${ok}, ошибок ${fail}</span>`;
   qs('#xlReport').innerHTML = '';
