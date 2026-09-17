@@ -210,6 +210,11 @@ const PAGE_SIZE = 100;
 let curPage = 0, totalPages = 1, totalAll = 0;
 
 async function search(page = 0) {
+  // «Все проекты» — только после выбора региона
+  if (qs('#searchBy').value === 'all' && !qs('#region').value) {
+    alert('Выберите регион для вывода всех проектов');
+    return;
+  }
   qs('#status').textContent = 'Поиск...';
   try {
     const p = new URLSearchParams({
@@ -489,7 +494,6 @@ function inPrsRange(p) {
 // Сопоставление всех строк файла с проектами:
 // ID — напрямую, ЕРП — по поиску (один автоматически, несколько — вручную)
 async function resolveAllRows() {
-  let firstProj = null;
   for (let i = 0; i < excelItems.length; i++) {
     const it = excelItems[i];
     const prCell = qs('#xlPr' + i);
@@ -517,21 +521,28 @@ async function resolveAllRows() {
         }
       }
       }
-      if (!firstProj && it._proj) firstProj = it._proj;
     } catch (e) {
       prCell.innerHTML = '<span class="err">ошибка поиска</span>';
       qs('#xlErr' + i).textContent = e.message;
     }
   }
-  // действия и типы документов — по первому найденному проекту
-  if (firstProj) {
-    loadDocTypes(firstProj.id, qs('#xlDocType'));
-    loadActions(firstProj, qs('#xlAction'));
+  // действия — объединение по всем найденным проектам, типы документов — по первому
+  const projs = excelItems.map(it => it._proj).filter(Boolean);
+  if (projs.length) {
+    loadDocTypes(projs[0].id, qs('#xlDocType'));
+    refreshActionList();
   }
 }
 
 function erpPick(i, k) {
   excelItems[i]._proj = excelItems[i]._cands[k];
+  refreshActionList();
+}
+
+// обновить список действий по всем уже определённым проектам
+function refreshActionList() {
+  const projs = excelItems.map(it => it._proj).filter(Boolean);
+  if (projs.length) loadActionsUnion(projs, qs('#xlAction'));
 }
 
 async function parseExcel() {
@@ -584,14 +595,24 @@ async function fetchProject(pid) {
   return it;
 }
 
-// список доступных действий проекта -> селект
-async function loadActions(proj, sel) {
+// список доступных действий (объединение по всем проектам) -> селект
+async function loadActionsUnion(projects, sel) {
+  const allowed = new Map(), all = new Map();
   try {
-    const data = await api(`/api/projects/${proj.id}/actions?process_id=${proj.wfProcessid}`);
-    const items = (data.items || []).filter(a => a.isAllowed);
+    for (const p of projects) {
+      if (!p.wfProcessid) continue;
+      const data = await api(`/api/projects/${p.id}/actions?process_id=${p.wfProcessid}`);
+      for (const a of (data.items || [])) {
+        if (!all.has(a.id)) all.set(a.id, a);
+        if (a.isAllowed && !allowed.has(a.id)) allowed.set(a.id, a);
+      }
+    }
+    const items = allowed.size ? [...allowed.values()] : [...all.values()];
     sel._items = items;
-    sel.innerHTML = '<option value="">— без действия —</option>' +
-      items.map((a, i) => `<option value="${i}">${a.name}</option>`).join('');
+    sel.innerHTML = items.length
+      ? '<option value="">— без действия —</option>' +
+        items.map((a, i) => `<option value="${i}">${a.name}</option>`).join('')
+      : '<option value="">нет доступных действий</option>';
   } catch (e) {
     sel.innerHTML = `<option value="">Ошибка загрузки действий: ${e.message}</option>`;
   }
@@ -688,7 +709,8 @@ async function applyExcel() {
   qs('#applyExcelBtn').disabled = false;
 }
 
-search(0);
+loadRegions();
+loadSubsidiaries();
 </script>
 </body>
 </html>

@@ -286,7 +286,24 @@ class NRIClient:
     def run_action(self, pid: int, process_id, action_url: str, action_id,
                    comment: str = "") -> dict:
         """Выполнить действие workflow без диалога (как кнопка в диалоге сайта):
-        проверка сообщений -> POST на URL действия с force=true."""
+        проверка доступности -> проверка сообщений -> POST с force=true."""
+        # 0. Доступно ли действие именно для этого проекта
+        #    (набор действий зависит от стадии процесса)
+        try:
+            acts = self.list_actions(pid, process_id)
+            act = next((a for a in acts
+                        if str(a.get("id")) == str(action_id)), None)
+            if act is None or not act.get("isAllowed"):
+                msgs = "; ".join(
+                    m.get("message", "") for m in (act.get("messages") or [])
+                ) if act else ""
+                raise RuntimeError(
+                    "Действие недоступно на текущем этапе"
+                    + (f" ({msgs})" if msgs else ""))
+        except RuntimeError:
+            raise
+        except Exception:  # noqa: BLE001
+            pass  # проверка не удалась — пробуем выполнить напрямую
         # 1. Сообщения перед выполнением (ListActionResultMessages)
         r = self._post(
             f"{BASE_URL}/ListActionResultMessages",
