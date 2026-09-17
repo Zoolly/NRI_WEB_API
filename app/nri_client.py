@@ -239,16 +239,32 @@ class NRIClient:
     # ---------- комментарий («Дополнительная информация») ----------
 
     def set_comment(self, pid: int, text: str, itype: int | None = None) -> dict:
-        """Записать текст в поле «Дополнительная информация» (desc_proj)
-        и зафиксировать в БД (как кнопка «Сохранить» в браузере):
-        update.do -> CheckBProjectID -> saveOrQuit.do."""
+        """Добавить текст в поле «Дополнительная информация» (desc_proj)
+        ниже существующего текста и зафиксировать в БД."""
         self._bind_project(pid)
+        root = self._rest_root(itype)
+        # 0. Текущее значение поля
+        r = self._get(f"{root}/info.do", params={"projectId": pid})
+        data = self._check_response(r, "Чтение данных проекта").get("data", {})
+        old = (data.get("additionalInfo") or "").rstrip()
+        if not text:
+            final = old
+        elif not old:
+            final = text
+        elif text in old:
+            final = old  # такой текст уже внесён — не дублируем
+        else:
+            final = old + "\n" + text
+        if len(final) > 1024:
+            raise RuntimeError(
+                f"Поле «Дополнительная информация» ограничено 1024 символами "
+                f"(получилось {len(final)}): сократите текст или очистите поле")
         # 1. Изменение поля (в сессии)
         r = self._post(
-            f"{self._rest_root(itype)}/update.do",
+            f"{root}/update.do",
             data={
                 "index": FIELD_ADDITIONAL_INFO,
-                "value": text,
+                "value": final,
                 "noRedirect": 1,
                 "context": "/PlanGraphicWeb",
             },
@@ -262,7 +278,7 @@ class NRIClient:
         self._check_response(r, "Проверка проекта")
         # 3. Сохранение в БД: actionType=3 (Сохранить), edit=1 (правка)
         r = self._post(
-            f"{self._rest_root(itype)}/saveOrQuit.do",
+            f"{root}/saveOrQuit.do",
             data={"actionType": 3, "edit": 1,
                   "noRedirect": 1, "context": "/PlanGraphicWeb"},
         )

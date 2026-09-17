@@ -342,6 +342,39 @@ def batch_comments(body: BatchCommentsIn):
     return {"ok": ok_cnt, "failed": len(results) - ok_cnt, "results": results}
 
 
+class ErrorRowIn(BaseModel):
+    id: Optional[int] = None
+    erp: Optional[str] = None
+    comment: str = ""
+
+
+class ExportErrorsIn(BaseModel):
+    items: List[ErrorRowIn]
+
+
+@app.post("/api/excel/export-errors")
+def export_errors(body: ExportErrorsIn):
+    """Выгрузить xlsx со строками, в которых произошла ошибка внесения."""
+    from openpyxl import Workbook
+    from fastapi.responses import StreamingResponse
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Проекты"
+    ws.append(["ID проекта", "ЕРП", "Комментарий"])
+    for it in body.items:
+        ws.append([it.id if it.id is not None else "",
+                   it.erp if it.erp is not None else "",
+                   it.comment])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="errors.xlsx"'},
+    )
+
+
 # ---------- мини-интерфейс ----------
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
