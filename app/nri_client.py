@@ -165,8 +165,9 @@ class NRIClient:
 
     def search_projects(self, query: str | None = None,
                         search_by: str = "-1", start: int = 0,
-                        limit: int = 200, region_id=None,
-                        subsidiary_id=None) -> list:
+                        limit: int = 100, region_id=None,
+                        subsidiary_id=None) -> tuple:
+        """Поиск проектов. Возвращает (items, total) — total по всему набору."""
         data = {
             "applicationKey": "key12",
             "actionKey": "prjbs.view",
@@ -182,7 +183,9 @@ class NRIClient:
         if subsidiary_id:
             data["subsidiaryId"] = subsidiary_id
         r = self._post(f"{BASE_URL}/ListProjects", data=data)
-        return self._check_response(r, "Поиск проектов").get("items", [])
+        payload = self._check_response(r, "Поиск проектов")
+        items = payload.get("items", [])
+        return items, payload.get("total", len(items))
 
     # ---------- справочники (регионы / филиалы) ----------
 

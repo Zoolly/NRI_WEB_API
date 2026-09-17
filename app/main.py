@@ -89,15 +89,16 @@ def login(body: LoginIn):
 
 @app.get("/api/projects")
 def search_projects(query: Optional[str] = None, search_by: str = "all",
-                    start: int = 0, limit: int = 200,
+                    start: int = 0, limit: int = 100,
                     region_id: Optional[int] = None,
                     subsidiary_id: Optional[int] = None):
-    """Поиск проектов. search_by: all|number|project_id|bsname|posname|gfk|...
+    """Поиск проектов (с пагинацией: start/limit, по умолчанию 100).
+    search_by: all|number|project_id|bsname|posname|gfk|...
     region_id / subsidiary_id — фильтры как на сайте."""
     try:
-        items = get_client().search_projects(
+        items, total = get_client().search_projects(
             query, search_by, start, limit, region_id, subsidiary_id)
-        return {"total": len(items), "items": items}
+        return {"total": total, "items": items}
     except Exception as e:  # noqa: BLE001
         _handle(e)
 
@@ -247,9 +248,10 @@ COMMENT_HEADERS = {"комментарий", "comment", "текст", "доп. �
 
 
 @app.post("/api/excel/parse")
-async def parse_excel(file: UploadFile = File(...), id_mode: str = Form("id")):
-    """Разбирает Excel: колонка с идентификатором (ID проекта или ЕРП)
-    и колонка с комментарием. id_mode: 'id' | 'erp'."""
+async def parse_excel(file: UploadFile = File(...)):
+    """Разбирает Excel: колонка 1 — ID проекта, колонка 2 — ЕРП,
+    колонка 3 — комментарий. Идентификация строки: по ID (приоритет),
+    при пустом ID — по ЕРП."""
     from openpyxl import load_workbook
     content = await file.read()
     try:
@@ -263,73 +265,57 @@ async def parse_excel(file: UploadFile = File(...), id_mode: str = Form("id")):
     if not rows:
         raise HTTPException(422, "Файл пуст")
 
-    if id_mode not in ("id", "erp", "auto"):
-        raise HTTPException(422, "id_mode должен быть 'id', 'erp' или 'auto'")
-    by_erp = id_mode == "erp"
-    notes = []
-
-    # Автоопределение режима по заголовку колонки (id_mode='auto')
-    if id_mode == "auto":
-        for row in rows[:5]:
-            for cell in row:
-                val = str(cell or "").strip().lower().rstrip(":")
-                if val in ERP_HEADERS:
-                    by_erp, _ = True, notes.append(
-                        "Автоопределение: колонка «" + val + "» -> режим ЕРП")
-                    break
-                if val in ID_HEADERS:
-                    by_erp = False
-                    notes.append(
-                        "Автоопределение: колонка «" + val + "» -> режим ID")
-                    break
-            if notes and notes[-1].startswith("Автоопределение"):
-                break
-        else:
-            by_erp = False
-            notes.append("Автоопределение: колонка не распознана -> режим ID")
-
     # Ищем строку заголовков в первых 5 строках
-    ident_headers = ID_HEADERS | ERP_HEADERS if by_erp else ID_HEADERS
-    header_idx, id_col, com_col = None, None, None
+    header_idx, id_col, erp_col, com_col = None, None, None, None
     for i, row in enumerate(rows[:5]):
         for j, cell in enumerate(row):
             val = str(cell or "").strip().lower().rstrip(":")
-            if val in ident_headers and id_col is None:
-                id_col = j
-                header_idx = i
+            if val in ID_HEADERS and id_col is None:
+                id_col, header_idx = j, i
+            elif val in ERP_HEADERS and erp_col is None:
+                erp_col, header_idx = j, i
             elif val in COMMENT_HEADERS and com_col is None:
-                com_col = j
-                header_idx = i
-    if id_col is None or com_col is None:
-        # Заголовки не найдены: первая колонка = идентификатор, вторая = комментарий
-        id_col, com_col = 0, 1
-        notes.append("Заголовки не распознаны — приняты: 1-я колонка = "
-                     f"{'ЕРП' if by_erp else 'ID'}, 2-я = комментарий")
+                com_col, header_idx = j, i
+    notes = []
+    if id_col is None and erp_col is None and com_col is None:
+        # Заголовки не найдены: 1-я колонка = ID, 2-я = ЕРП, 3-я = комментарий
+        id_col, erp_col, com_col = 0, 1, 2
+        notes.append("Заголовки не распознаны — приняты: 1-я колонка = ID, "
+                     "2-я = ЕРП, 3-я = комментарий")
         data_rows = rows
     else:
+        if id_col is None:
+            id_col = 0
+        if erp_col is None:
+            erp_col = 1
+        if com_col is None:
+            com_col = max(id_col, erp_col) + 1
         data_rows = rows[header_idx + 1:]
+
+    def cell(row, col):
+        return str(row[col]).strip() if col < len(row) and row[col] is not None else ""
 
     items, errors = [], []
     for n, row in enumerate(data_rows, start=1):
-        if id_col >= len(row) or row[id_col] is None:
+        raw_id = cell(row, id_col)
+        raw_erp = cell(row, erp_col)
+        comment = cell(row, com_col)
+        if not raw_id and not raw_erp:
+            errors.append(f"Строка {n}: не заполнен ни ID, ни ЕРП")
             continue
-        raw = str(row[id_col]).strip()
-        if not raw:
-            continue
-        comment = str(row[com_col]).strip() if com_col < len(row) and row[com_col] is not None else ""
-        if by_erp:
-            items.append({"erp": raw, "comment": comment})
-        else:
+        item = {"comment": comment}
+        if raw_id:
             try:
-                items.append({"id": int(float(raw)), "comment": comment})
+                item["id"] = int(float(raw_id))
             except ValueError:
-                errors.append(f"Строка {n}: ID '{raw}' не является числом")
+                errors.append(f"Строка {n}: ID '{raw_id}' не является числом")
                 continue
+        else:
+            item["erp"] = raw_erp
+        items.append(item)
 
     return {"items": items, "total": len(items),
-            "errors": errors, "notes": notes,
-            "sheet": ws.title,
-            "id_mode": "erp" if by_erp else "id"}
+            "errors": errors, "notes": notes, "sheet": ws.title}
 
 
 class CommentItem(BaseModel):

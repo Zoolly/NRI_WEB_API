@@ -148,7 +148,6 @@
   </div>
   <div class="row">
     <select id="docType"><option value="">— тип документа —</option></select>
-    <input type="text" id="docDescr" placeholder="Описание документа" style="width:280px">
   </div>
   <div class="row">
     <input type="file" id="files" multiple>
@@ -161,30 +160,19 @@
 <div class="card">
   <h2>Импорт из Excel — проекты + комментарий для каждого</h2>
   <div class="row">
-    <span class="fieldLabel">Идентификатор:</span>
-    <select id="xlIdMode">
-      <option value="auto">Авто</option>
-      <option value="id">ID проекта</option>
-      <option value="erp">ЕРП (номер позиции)</option>
-    </select>
     <input type="file" id="xlFile" accept=".xlsx,.xls">
     <button onclick="parseExcel()">Прочитать файл</button>
     <button id="applyExcelBtn" class="primary" onclick="applyExcel()" disabled>Применить</button>
     <span id="xlStatus" class="muted"></span>
   </div>
   <div class="row">
-    <span class="fieldLabel">Документы для всех проектов:</span>
     <select id="xlDocType"><option value="">— тип документа —</option></select>
-    <input type="text" id="xlDocDescr" placeholder="Описание документа" style="width:280px">
     <input type="file" id="xlFiles" multiple>
   </div>
   <div class="row">
-    <span class="fieldLabel">Действие workflow:</span>
     <select id="xlAction"><option value="">— без действия —</option></select>
     <button id="applyActionBtn" class="primary" onclick="applyExcelAction()" disabled>Выполнить действие</button>
   </div>
-  <div class="hint">Для действий с комментарием текст берётся из колонки «Комментарий» файла.</div>
-  <div class="hint">Колонки: «ID» (или «ИД проекта») и «Комментарий». Без заголовков: 1-я колонка = ID, 2-я = комментарий. Комментарий можно оставить пустым — тогда только прикрепятся файлы.</div>
   <div id="xlErrors"></div>
   <div id="xlReport" style="margin-top:.5rem"></div>
   <table id="xlTbl"><thead><tr><th>ID проекта</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th></tr></thead><tbody></tbody></table>
@@ -197,6 +185,11 @@
 
 <div id="tblWrap">
   <table id="tbl"><thead></thead><tbody></tbody></table>
+</div>
+<div class="row" style="justify-content:center;gap:1rem;margin-top:.6rem">
+  <button id="pgPrev" onclick="pageTurn(-1)" disabled>‹ Назад</button>
+  <span id="pageInfo" class="muted"></span>
+  <button id="pgNext" onclick="pageTurn(1)" disabled>Вперёд ›</button>
 </div>
 <div id="shownCount" class="muted" style="text-align:right;margin:.4rem .2rem 0"></div>
 
@@ -213,21 +206,40 @@ async function api(url, opts) {
   return body;
 }
 
-async function search(start = 0) {
+const PAGE_SIZE = 100;
+let curPage = 0, totalPages = 1, totalAll = 0;
+
+async function search(page = 0) {
   qs('#status').textContent = 'Поиск...';
   try {
     const p = new URLSearchParams({
       search_by: qs('#searchBy').value,
-      start,
-      limit: 200
+      start: page * PAGE_SIZE,
+      limit: PAGE_SIZE
     });
     if (qs('#q').value.trim()) p.set('query', qs('#q').value.trim());
     if (qs('#region').value) p.set('region_id', qs('#region').value);
     if (qs('#subsidiary').value) p.set('subsidiary_id', qs('#subsidiary').value);
     const data = await api('/api/projects?' + p);
+    curPage = page;
+    totalAll = data.total ?? (data.items || []).length;
+    totalPages = Math.max(1, Math.ceil(totalAll / PAGE_SIZE));
     render(data.items);
+    updatePager();
     qs('#status').textContent = '';
   } catch (e) { qs('#status').innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+function updatePager() {
+  qs('#pageInfo').textContent = `Стр. ${curPage + 1} из ${totalPages} (всего ${totalAll})`;
+  qs('#pgPrev').disabled = curPage <= 0;
+  qs('#pgNext').disabled = curPage >= totalPages - 1;
+}
+
+function pageTurn(d) {
+  const next = curPage + d;
+  if (next < 0 || next >= totalPages) return;
+  search(next);
 }
 
 // --- фильтры регион/филиал (как на сайте) ---
@@ -295,7 +307,7 @@ function applyColFilters() {
     return `<tr><td>${cb}</td>${tds}</tr>`;
   }).join('');
   qs('#shownCount').textContent =
-    currentItems.length ? `показано: ${view.length} из ${currentItems.length}` : '';
+    currentItems.length ? `на странице: ${view.length} из ${currentItems.length}` : '';
 }
 
 // делегирование: селекты в шапке пересоздаются при каждом поиске
@@ -447,7 +459,6 @@ async function runBatch() {
   if (comment.trim()) fd.append('comment', comment);
   if (docType) {
     fd.append('doc_type_id', docType);
-    fd.append('description', qs('#docDescr').value);
   }
   for (const f of files) fd.append('files', f);
 
@@ -465,7 +476,63 @@ async function runBatch() {
 }
 
 let excelItems = [];
-let excelIdMode = 'id';
+
+// ПРС в пределах ±2 лет от текущего (без года — оставляем)
+function inPrsRange(p) {
+  const curYear = new Date().getFullYear();
+  const ys = String(p.linkedPlanYears ?? '')
+    .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  if (!ys.length) return true;
+  return ys.some(y => Math.abs(y - curYear) <= 2);
+}
+
+// Сопоставление всех строк файла с проектами:
+// ID — напрямую, ЕРП — по поиску (один автоматически, несколько — вручную)
+async function resolveAllRows() {
+  let firstProj = null;
+  for (let i = 0; i < excelItems.length; i++) {
+    const it = excelItems[i];
+    const prCell = qs('#xlPr' + i);
+    try {
+      if (it.id !== undefined) {
+        it._proj = await fetchProject(it.id);
+        prCell.textContent = `${it._proj.displayNumber} (id ${it._proj.id})`;
+      } else {
+        const exact = await findErpCandidates(it.erp);
+        if (!exact.length) {
+          qs('#xlErr' + i).textContent = 'проект не найден';
+        } else if (exact.length === 1) {
+          it._proj = exact[0];
+          prCell.textContent = `${exact[0].displayNumber} (id ${exact[0].id})`;
+      } else {
+        const near = exact.filter(inPrsRange);
+        if (!near.length) {
+          qs('#xlErr' + i).textContent = `проекты с ЕРП ${it.erp} найдены, но все вне диапазона ПРС (±2 года)`;
+        } else {
+          it._cands = near;
+          prCell.innerHTML = '<div class="muted" style="margin-bottom:.2rem">несколько проектов — выберите:</div>' +
+            near.map((p, k) =>
+              `<label class="erpOpt"><input type="radio" name="erp${i}" value="${k}" onchange="erpPick(${i}, ${k})"> ` +
+              `<b>${p.displayNumber}</b> — ${p.SType}, ${p.SAgreeStr}, ПРС ${p.linkedPlanYears ?? ''} (id ${p.id})</label>`).join('');
+        }
+      }
+      }
+      if (!firstProj && it._proj) firstProj = it._proj;
+    } catch (e) {
+      prCell.innerHTML = '<span class="err">ошибка поиска</span>';
+      qs('#xlErr' + i).textContent = e.message;
+    }
+  }
+  // действия и типы документов — по первому найденному проекту
+  if (firstProj) {
+    loadDocTypes(firstProj.id, qs('#xlDocType'));
+    loadActions(firstProj, qs('#xlAction'));
+  }
+}
+
+function erpPick(i, k) {
+  excelItems[i]._proj = excelItems[i]._cands[k];
+}
 
 async function parseExcel() {
   const f = qs('#xlFile').files[0];
@@ -475,33 +542,20 @@ async function parseExcel() {
   try {
     const fd = new FormData();
     fd.append('file', f);
-    fd.append('id_mode', qs('#xlIdMode').value);
     const res = await api('/api/excel/parse', { method: 'POST', body: fd });
     excelItems = res.items;
-    excelIdMode = res.id_mode || 'id';
-    const identTitle = excelIdMode === 'erp' ? 'ЕРП' : 'ID проекта';
-    const autoNote = qs('#xlIdMode').value === 'auto' && (res.notes || []).length
-      ? ` (${res.notes.join('; ')})` : '';
     qs('#xlTbl thead').innerHTML =
-      `<tr><th>${identTitle}</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th><th>Ошибка</th></tr>`;
+      `<tr><th>ID</th><th>ЕРП</th><th>Комментарий</th><th>Проект (№ БС)</th><th>Статус</th><th>Ошибка</th></tr>`;
     qs('#xlTbl tbody').innerHTML = excelItems.map((it, i) =>
-      `<tr><td>${it.erp ?? it.id}</td><td>${it.comment || '<i class="muted">(пусто)</i>'}</td><td id="xlPr${i}" class="muted">${it.erp !== undefined ? '<span class="badge wait">поиск…</span>' : '—'}</td><td id="xlSt${i}" class="muted">—</td><td id="xlErr${i}" class="err" style="font-size:.75rem"></td></tr>`).join('');
-    qs('#xlStatus').textContent = `прочитано: ${res.total} (лист «${res.sheet}»), режим: ${identTitle}${autoNote}`;
+      `<tr><td>${it.id ?? ''}</td><td>${it.erp ?? ''}</td><td>${it.comment || '<i class="muted">(пусто)</i>'}</td><td id="xlPr${i}" class="muted"><span class="badge wait">поиск…</span></td><td id="xlSt${i}" class="muted">—</td><td id="xlErr${i}" class="err" style="font-size:.75rem"></td></tr>`).join('');
+    qs('#xlStatus').textContent = `прочитано: ${res.total} (лист «${res.sheet}»)`;
     qs('#xlErrors').textContent = (res.errors || []).join('; ');
     qs('#applyExcelBtn').disabled = !excelItems.length;
     qs('#applyActionBtn').disabled = !excelItems.length;
-    // сопоставление идентификаторов с проектами + действия по первому проекту
+    // сопоставление всех строк с проектами + действия по первому проекту
     if (excelItems.length) {
-      (async () => {
-        try {
-          const it = excelItems[0];
-          const proj = it.erp !== undefined ? await resolveErp(it.erp) : await fetchProject(it.id);
-          loadDocTypes(proj.id, qs('#xlDocType'));
-          loadActions(proj, qs('#xlAction'));
-        } catch (e) { /* подгрузится при выборе проекта в поиске */ }
-      })();
+      resolveAllRows();
     }
-    if (excelIdMode === 'erp') resolveAllErp();
   } catch (e) {
     qs('#xlStatus').textContent = '';
     qs('#xlErrors').textContent = e.message;
@@ -543,47 +597,15 @@ async function loadActions(proj, sel) {
   }
 }
 
-// Сопоставление всех ЕРП из файла: 0/1 проект — автоматически,
-// несколько — список с переключателями для выбора вручную
-async function resolveAllErp() {
-  for (let i = 0; i < excelItems.length; i++) {
-    const it = excelItems[i];
-    const prCell = qs('#xlPr' + i);
-    try {
-      const exact = await findErpCandidates(it.erp);
-      if (!exact.length) {
-        prCell.innerHTML = '—';
-        qs('#xlErr' + i).textContent = 'проект не найден';
-      } else if (exact.length === 1) {
-        it._proj = exact[0];
-        prCell.textContent = `${exact[0].displayNumber} (id ${exact[0].id})`;
-      } else {
-        it._cands = exact;
-        prCell.innerHTML = '<div class="muted" style="margin-bottom:.2rem">несколько проектов — выберите:</div>' +
-          exact.map((p, k) =>
-            `<label class="erpOpt"><input type="radio" name="erp${i}" value="${k}" onchange="erpPick(${i}, ${k})"> ` +
-            `<b>${p.displayNumber}</b> — ${p.SType}, ${p.SAgreeStr}, ${p.fullAddress ?? ''} (id ${p.id})</label>`).join('');
-      }
-    } catch (e) {
-      prCell.innerHTML = `<span class="err" title="${e.message}">ошибка поиска</span>`;
-      qs('#xlErr' + i).textContent = e.message;
-    }
-  }
-}
-
-function erpPick(i, k) {
-  excelItems[i]._proj = excelItems[i]._cands[k];
-}
-
 // отдельный прогон: только действие workflow для всех проектов списка
 async function applyExcelAction() {
   if (!excelItems.length) return;
   const actSel = qs('#xlAction');
   const action = actSel.value !== '' ? actSel._items[+actSel.value] : null;
   if (!action) return alert('Выберите действие workflow');
-  const unresolved = excelItems.filter(it => it.erp !== undefined && !it._proj);
-  if (unresolved.length) return alert(`Не выбран проект для ${unresolved.length} строк(и) `
-    + `(не найден или несколько совпадений — отметьте проект в списке)`);
+  const unresolved = excelItems.filter(it => !it._proj);
+  if (unresolved.length) return alert(`Не определён проект для ${unresolved.length} строк(и) `
+    + `(не найден или несколько совпадений по ЕРП — выберите проект в списке)`);
   if (!confirm(`Выполнить действие «${action.name}» для ${excelItems.length} проектов?`)) return;
 
   qs('#applyActionBtn').disabled = true;
@@ -594,7 +616,6 @@ async function applyExcelAction() {
     const errCell = qs('#xlErr' + i);
     stCell.innerHTML = '<span class="badge wait">…</span>';
     try {
-      if (!it._proj) it._proj = await fetchProject(it.id);
       await api(`/api/projects/${it._proj.id}/run-action`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -612,8 +633,7 @@ async function applyExcelAction() {
   }
   qs('#xlStatus').innerHTML =
     `Действие «${action.name}»: <span class="${fail ? 'err' : 'ok'}">успешно ${ok}, ошибок ${fail}</span>`;
-  qs('#xlReport').innerHTML = fail
-    ? `<span class="err">Ошибки — в столбце «Ошибка» таблицы</span>` : '';
+  qs('#xlReport').innerHTML = '';
   qs('#applyActionBtn').disabled = false;
 }
 
@@ -621,12 +641,11 @@ async function applyExcel() {
   if (!excelItems.length) return;
   const files = qs('#xlFiles').files;
   const docType = qs('#xlDocType').value;
-  const docDescr = qs('#xlDocDescr').value;
   const actSel = qs('#xlAction');
   const action = null; // действие выполняется отдельной кнопкой
-  const unresolved = excelItems.filter(it => it.erp !== undefined && !it._proj);
-  if (unresolved.length) return alert(`Не выбран проект для ${unresolved.length} строк(и) `
-    + `(не найден или несколько совпадений — отметьте проект в списке)`);
+  const unresolved = excelItems.filter(it => !it._proj);
+  if (unresolved.length) return alert(`Не определён проект для ${unresolved.length} строк(и) `
+    + `(не найден или несколько совпадений по ЕРП — выберите проект в списке)`);
   const withComment = excelItems.some(it => it.comment.trim());
   if (!withComment && !files.length) return alert('В файле нет комментариев и не выбраны документы');
   if (files.length && !docType) return alert('Выберите тип документа для прикрепления файлов');
@@ -641,10 +660,7 @@ async function applyExcel() {
     const stCell = qs('#xlSt' + i);
     const errCell = qs('#xlErr' + i);
     stCell.innerHTML = '<span class="badge wait">…</span>';
-    const rowErrors = [];
     try {
-      // проект (для id-режима подгружаем данные, для ЕРП уже выбран)
-      if (!it._proj) it._proj = await fetchProject(it.id);
       const pid = it._proj.id;
       const steps = [];
       if (it.comment.trim()) {
@@ -657,21 +673,18 @@ async function applyExcel() {
         const fd = new FormData();
         fd.append('file', f);
         fd.append('doc_type_id', docType);
-        fd.append('description', docDescr);
         steps.push(api(`/api/projects/${pid}/attach`, { method: 'POST', body: fd }));
       }
       await Promise.all(steps);
       stCell.innerHTML = '<span class="badge ok">OK</span>'; ok++;
     } catch (e) {
-      rowErrors.push(e.message);
       stCell.innerHTML = '<span class="badge err">✗</span>';
-      errCell.textContent = rowErrors.join('; ');
+      errCell.textContent = e.message;
       fail++;
     }
   }
   qs('#xlStatus').innerHTML = `<span class="${fail ? 'err' : 'ok'}">Готово: успешно ${ok}, ошибок ${fail}</span>`;
-  qs('#xlReport').innerHTML = fail
-    ? `<span class="err">Ошибок: ${fail} — тексты в столбце «Ошибка» таблицы</span>` : '';
+  qs('#xlReport').innerHTML = '';
   qs('#applyExcelBtn').disabled = false;
 }
 
