@@ -477,12 +477,12 @@ async function runBatch() {
 
 let excelItems = [];
 
-// ПРС в пределах ±2 лет от текущего (без года — оставляем)
+// ПРС в пределах ±2 лет от текущего (проекты без года не показываем)
 function inPrsRange(p) {
   const curYear = new Date().getFullYear();
   const ys = String(p.linkedPlanYears ?? '')
     .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-  if (!ys.length) return true;
+  if (!ys.length) return false;
   return ys.some(y => Math.abs(y - curYear) <= 2);
 }
 
